@@ -345,7 +345,12 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
         self.saw_title = True
 
     def visit_Text(self, node):
-        if self.at('literal_block'):
+        if self.at('index'):
+            # using @ helps control sorting
+            # http://en.wikibooks.org/wiki/LaTeX/Indexing#Controlling_sorting
+            self.doc += nt.Raw(index_escape(node.astext()), escape=False)
+
+        elif self.at('literal_block'):
             self.doc += nt.Raw(node.astext(), escape=False)
 
         # elif self.at('literal'):
@@ -355,8 +360,9 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
         elif self.at('footnote'):
             print "NODE foot", node
             self.doc += nt.Raw(node.astext(), escape=True)
-        elif self.at('title'):
-            import pdb; pdb.set_trace() # FIXME
+        elif self.at('title') and not self.saw_title:
+            pass
+
         elif not self.at('raw'):
             # should be last
             self.doc += nt.Raw(node.astext(), escape=True)
@@ -420,7 +426,7 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
         if self.at('index'):
             # using @ helps control sorting
             # http://en.wikibooks.org/wiki/LaTeX/Indexing#Controlling_sorting
-            self.raw(r'''\index{'''+ node.astext().replace('!', '"!') + "@")
+            self.raw(r'''\index{'''+ index_escape(node.astext()) + "@")
             self.fancy_index = True
 
     def depart_paragraph(self, node):
@@ -625,6 +631,8 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
     def raw(self, txt, escape=False):
         self.doc += nt.Raw(txt, escape)
 
+def index_escape(txt):
+    return txt.replace('!', '"!').replace('#', '"\#').replace('%', '\%').replace('_', '\_').replace('{', '\{').replace('}', '\}')#.replace('_', '"\verb=_=')
 class BinaryFileOutput(io.FileOutput):
     """
     A version of docutils.io.FileOutput which writes to a binary file.

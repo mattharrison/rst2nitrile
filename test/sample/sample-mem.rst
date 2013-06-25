@@ -205,17 +205,9 @@ Example ``rst2epub2.py`` Book
     \labelsep0\p@}%
     \item\itshape}{\vspace{-3pt}\endlist}
 
-
-
-
-  \title{Treading On Python Volume 1}
-  %\subtitle{Beginning Python}
+  \title{RST2NITRILE Sample}
   \author{Matt Harrison}
   \date{June 2013}
-  %\nostarchlocation{Utah}
-  %\chapterstyle{bringhurst}
-
-
 
   \begin{document}
 
@@ -230,7 +222,7 @@ Example ``rst2epub2.py`` Book
   \null\vfill
   \begin{flushleft}
   \textit{\title}
-  COPYRIGHT INFO
+  COPYRIGHT INFOls
 
   ISBN--INFO
 
@@ -324,7 +316,7 @@ molestie venenatis varius. Nulla interdum porttitor erat at
 adipiscing. Nulla arcu metus, porta vel vestibulum sit amet,
 porttitor lobortis sapien. Donec tincidunt placerat imperdiet.
 
-.. image:: matt.jpg
+.. image:: blue.png
    :scale: 50%
 
 Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nullam
