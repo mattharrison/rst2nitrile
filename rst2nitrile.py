@@ -632,7 +632,8 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
         self.doc += nt.Raw(txt, escape)
 
 def index_escape(txt):
-    return txt.replace('!', '"!').replace('#', '"\#').replace('%', '\%').replace('_', '\_').replace('{', '\{').replace('}', '\}')#.replace('_', '"\verb=_=')
+    return txt.replace('!', '"!').replace('#', '"\#').replace('%', '\%').replace('_', '\_').replace('{', '\{').replace('}', '\}').replace('@', '"@')
+
 class BinaryFileOutput(io.FileOutput):
     """
     A version of docutils.io.FileOutput which writes to a binary file.
