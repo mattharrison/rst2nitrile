@@ -2,8 +2,9 @@
 # -*- coding: utf-8 -*-
 # Copyright 2008-2009 Matt Harrison
 # Licensed under Apache License, Version 2.0 (current)
-import sys
 import os
+import shutil
+import sys
 
 import docutils
 import docutils.utils #hack around circ. dep in io (docutils.10)
@@ -178,33 +179,35 @@ class Writer(writers.Writer):
 
 
 MEMOIR_MAPPING = {
-    #'literal': (r'\texttt{\detokenize{', '}}'),
     'literal': (r'\texttt{', '}'),
-    #'note': (r'\begin{titledframe}[Note]{Note}','\n\\end{titledframe}\n'),
+    'strong': ('\\textbf{', '}'),
+    'emphasis': ('\\emph{', '}'),
+    'comment': ('%', '\n'),
     'note': (r'\begin{framewithtitle}{Note}','\n\\end{framewithtitle}\n'),
     'hint': (r'\begin{framewithtitle}{Hint}','\n\\end{framewithtitle}\n'),
-    'tip': (r'\begin{framewithtitle}{Tip}','\n\\end{framewithtitle}\n'),
-    'literal_block':#('\\begin{lstlisting}[frame=none]\n',
-    ('\\begin{lstlisting}\n',
-                     '\n\\end{lstlisting}\n\n'),
-    'doctest_block':('\\begin{lstlisting}[frame=none]\n',
-                     '\n\\end{lstlisting}\n\n'),
-    #'table':('\\begin{tabular*}{250pt}', '\\end{tabular*}\n'),
-    #'table':('\\begin{tabular*}{\\textwidth}', '\\end{tabular*}\n'),
-    'table':('\\begin{center}\\begin{tabulary}{\\textwidth}', '\\end{tabulary}\\end{center}\n'),
+    'tip': (r'\begin{tip}','\\end{tip}\n'),
+    #'tip': (r'\begin{framewithtitle}{Tip}','\n\\end{framewithtitle}\n'),
+    'literal_block': ('\\begin{lstlisting}\n',
+                      '\n\\end{lstlisting}\n\n'),
+    'doctest_block': ('\\begin{lstlisting}[frame=none]\n',
+                      '\n\\end{lstlisting}\n\n'),
+    'table': ('\\begin{center}\\begin{tabulary}{\\textwidth}',
+              '\\end{tabulary}\\end{center}\n'),
+    # <colspec colwidth="51"/><colspec colwidth="40"/>
+    'colspec': (None, None),
+    'thead': ('', '\n\\hline\n'),
+    'tbody': ('', '\\hline\n'),
     'block_quote':('\\begin{quote}\n', '\n\\end{quote}\n\n'),
-    #'attribution':('\\attrib{','}'),
     'attribution':('\\sourceatright{','}'),
-    # 'footnote':('\\footnote','}'),
     'footnote':('\\footnotetext','}'),
-    #'footnote_reference':('\\footnotemark[',']'),
-    #'label':('',''),
-    # #'footnote_reference':('\\footref{','}'),
-    # #'footnote_reference':('',''),
-    # #'label':('\\footref{','}'),
-    # 'label':('[',']{'), # part of footnote
-    'enumerated_list': ('\\begin{enumerate}\n', '\\end{enumerate}\n\n')
-
+    'enumerated_list': ('\\begin{enumerate}\n', '\\end{enumerate}\n\n'),
+    'target': (None, None),
+    'field_list': (None, None),
+    'field': (None, None),
+    'field_name': (None, None),
+    'field_body': (None, None),
+    'list_item': ('  \\item ', '\n'),
+    'bullet_list': ('\\begin{itemize}\n', '\\end{itemize}\n'),
 }
 
 NOSTARCH_MAPPING = MEMOIR_MAPPING.copy()
@@ -231,7 +234,6 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
         self.section_level = 0
         self.saw_title = False  # only look at first title
         self.node_mapping = mapping if mapping else MEMOIR_MAPPING
-        self.fancy_index = False
         #self.node_mapping = mapping if mapping else NOSTARCH_MAPPING
 
     def at(self, nodename):
@@ -255,7 +257,9 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
         name = node.tagname
         self.in_node[name] += 1
         if name in self.node_mapping:
-            self.raw(self.node_mapping[name][0])
+            content = self.node_mapping[name][0]
+            if content:
+                self.raw(content)
         else:
             nodes.GenericNodeVisitor.dispatch_visit(self, node)
 
@@ -263,7 +267,9 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
         self.in_node[node.tagname] -= 1
         name = node.tagname
         if name in self.node_mapping:
-            self.raw(self.node_mapping[name][1])
+            content = self.node_mapping[name][1]
+            if content:
+                self.raw(content)
         else:
             nodes.GenericNodeVisitor.dispatch_departure(self, node)
 
@@ -278,14 +284,11 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
             print "NODE", node, node.tagname
         raise NotImplementedError('depart node is %r, tag is %s' % (node, node.tagname))
 
-
     def _dumb_visit(self, node):
         pass
     _dumb_depart = _dumb_visit
 
     def visit_index(self, node):
-        print "INDEX", node
-        # import pdb; pdb.set_trace() # FIXME
         entries = node.attributes['entries']
         if entries:
             #sphinx mode
@@ -300,17 +303,10 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
         else:
             # handle in paragraphs
             # I want formatted index entries, sphinx doesn't :(
-            # self.fancy_index = True
-            # self.raw(r'''\index{''')#documentclass[10pt]{memoir}
             pass
-        print "FANCY", self.fancy_index
 
     def depart_index(self, node):
-        print "DI!"
-        if self.fancy_index:
-            # self.raw(r'''}''')
-            # self.fancy_index=False
-            pass
+        pass
 
     def add_index(self, name):
         self.raw(r'''\index{''')#documentclass[10pt]{memoir}
@@ -332,14 +328,12 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
         if not self.saw_title:
             print "TITLEF", node
             pass
-            #self.doc += nt.Raw(r'\title{')
         elif self.section_level:
             self.doc += nt.Raw(r'{')
 
     def depart_title(self, node):
         if not self.saw_title:
             pass
-            #self.doc += nt.Raw('}\n')
         elif self.section_level:
             self.doc += nt.Raw('}\n')
         self.saw_title = True
@@ -352,44 +346,20 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
 
         elif self.at('literal_block'):
             self.doc += nt.Raw(node.astext(), escape=False)
-
-        # elif self.at('literal'):
-        #     self.doc += nt.Raw(node.astext(), escape=False)
-        # elif self.at('footnote_reference'):
-        #     pass
         elif self.at('footnote'):
-            print "NODE foot", node
             self.doc += nt.Raw(node.astext(), escape=True)
         elif self.at('title') and not self.saw_title:
             pass
-
         elif not self.at('raw'):
             # should be last
             self.doc += nt.Raw(node.astext(), escape=True)
 
-
-
-
     depart_Text = _dumb_depart
 
-    def visit_literal(self, node):
-        self.raw(r'\texttt{\detokenize{', False)
-
-    def depart_literal(self, node):
-        self.raw('}}')
-
-    def visit_comment(self, node):
-        self.raw('%')
-
-    def depart_comment(self, node):
-        self.raw('\n')
-
     def visit_image(self, node):
-        print "IMG", node
         source_img = node.attributes['uri']
         scale = node.attributes.get('scale', None)
         def abspath(source_img, source_file):
-            # return abspath
             return os.path.abspath(os.path.join(os.path.dirname(source_file), source_img))
         full_path = abspath(source_img, self.settings._source)
         self.doc.add_image(source_img, full_path)
@@ -401,7 +371,6 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
                 pass
             else:
                 raise
-        import shutil
         shutil.copy(full_path, out_path)
         if scale:
             scale = '[scale={0}]'.format(str(float(scale)/100))
@@ -409,17 +378,9 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
             scale = ''
         self.raw(r'''\includegraphics{0}{{'''.format(scale) + source_img + '''}
 ''')
-  #       self.raw(r'''\begin{figure}[h!]
-  # \caption{A picture of a gull.}
-  # \centering
-  #   \includegraphics[width=0.5\textwidth]{''') # filename
-
-
 
     def depart_image(self, node):
         pass
-#         self.raw(r'''}
-# \end{figure}''')
 
     def visit_paragraph(self, node):
         classes = node.attributes.get('classes', [])
@@ -439,7 +400,7 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
     def visit_inline(self, node):
         classes = node.attributes.get('classes', [])
         for klass in classes:
-            # fxxme!!!
+            # fixme - add support for others!!!
             if klass in ['tiny']:
                 self.raw('\\tiny{')
 
@@ -459,7 +420,6 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
             self.doc.preamble.__iadd__( nt.Raw(node.astext(), escape=False))
             self.doc.preamble.__iadd__(nt.Raw('\n\n', escape=False))
 
-    # visit_raw = _dumb_visit
     def depart_raw(self, node):
         self.in_raw = False
 
@@ -468,30 +428,9 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
         self.raw('\\{0}'.format(section))  # title puts opening {
         self.section_level += 1
 
-
     def depart_section(self, node):
-        #self.raw('}\n')
         self.raw('\n') # title puts closing {
         self.section_level -= 1
-
-    def visit_literal_block(self, node):
-        #self.raw('\\begin{verbatim}\n')
-        self.raw('\\begin{lstlisting}[frame=single]\n')
-
-    def depart_literal_block(self, node):
-        #self.raw('\n\\end{verbatim}\n\n')
-        self.raw('\n\\end{lstlisting}\n\n')
-
-    def visit_emphasis(self, node):
-        self.raw('\\emph{')
-
-    def depart_emphasis(self, node):
-        self.raw('}')
-
-    def visit_strong(self, node):
-        self.raw('\\textbf{')
-    def depart_strong(self, node):
-        self.raw('}')
 
     def visit_reference(self, node):
         # \href{http://www.wikibooks.org}{Wikibooks home}
@@ -500,50 +439,12 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
     def depart_reference(self, node):
         self.raw('}')
 
-    def visit_bullet_list(self, node):
-        self.raw('\\begin{itemize}\n')
-
-    def depart_bullet_list(self, node):
-        self.raw('\\end{itemize}\n')
-
-    def visit_list_item(self, node):
-        self.raw('  \\item ')
-
-    def depart_list_item(self, node):
-        self.raw('\n')
-
-    def visit_table(self, node):
-        print "NODE", str(node)
-#         \begin{tabular}{ l c r }
-#   1 & 2 & 3 \\
-#   4 & 5 & 6 \\
-#   7 & 8 & 9 \\
-# \end{tabular}
-        self.raw('\\begin{tabular}')  # justify columns
-
-    def depart_table(self, node):
-        self.raw('\\end{tabular}\n')
-
     def visit_tgroup(self, node):
         # justify columns
         self.num_cols = int(node['cols'])
-        #self.raw('{ r ' + ' l'* (self.num_cols -1)  + ' }\n')
         self.raw('{ R ' + ' L'* (self.num_cols -1)  + ' }\n')
 
     depart_tgroup = _dumb_depart
-
-    def visit_colspec(self, node):
-        # <colspec colwidth="51"/><colspec colwidth="40"/>
-
-        pass
-    depart_colspec = _dumb_depart
-
-    def visit_thead(self, node):
-        # <thead><row><entry><paragraph>Method signature</paragraph></entry><entry><paragraph>Explanation</paragraph></entry><
-        pass
-
-    def depart_thead(self, node):
-        self.raw('\n\\hline\n')
 
     def visit_row(self, node):
         self.cols_seen = 0
@@ -563,76 +464,30 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
             self.raw(' & ')  # keep track of
         self.cols_seen += 1
 
-    def visit_tbody(self, node):
-        pass
-
-    def depart_tbody(self, node):
-        # final horiz line
-        self.raw('\\hline\n')
-
-    def visit_target(self, node):
-        # handle???
-        pass
-
-    depart_target = _dumb_depart
-
-    def visit_note(self, node):
-        #self.raw(r'\subsubsection{')
-        #self.raw(r'\sidebar{')  # memoir specific
-        self.raw(r'\begin{framed}')
-    def depart_note(self, node):
-        #self.raw('}\n')
-        self.raw('\n\\end{framed}\n')
-
-    visit_tip = visit_note
-    depart_tip = depart_note
-
-    def visit_field_list(self, node):
-        # see rst2epub
-        pass
-
-
-    def visit_footnote(self, node):
-        print "FOOT", node
-        print "ATT", node.attributes
-        self.raw('\\footnote{')
-
-    def depart_footnote(self, node):
-        self.raw('}')
-
     def visit_label(self, node):
         self.raw('[')
+
     def depart_label(self, node):
         if self.at('footnote'):
             self.raw(']{')
         else:
             self.raw('{')
+
     def visit_footnote_reference(self, node):
-        print "FR", node
         # hack to get rid of space required by rst
         self.doc -= ' '
         self.raw('\\footnotemark[')
 
-        #'footnote_reference':('\\footnotemark[',']'),
-        #'footnote_reference':('\\footref{','}'),
-
     def depart_footnote_reference(self, node):
         self.raw(']')
-    #visit_problematic = _dumb_depart
-    #depart_problematic = _dumb_depart
-    depart_field_list = visit_field_list
-    visit_field = visit_field_list
-    depart_field = visit_field_list
-    visit_field_name = visit_field_list
-    depart_field_name = visit_field_list
-    visit_field_body = visit_field_list
-    depart_field_body = visit_field_list
 
     def raw(self, txt, escape=False):
         self.doc += nt.Raw(txt, escape)
 
+
 def index_escape(txt):
     return txt.replace('!', '"!').replace('#', '"\#').replace('%', '\%').replace('_', '\_').replace('{', '\{').replace('}', '\}').replace('@', '"@')
+
 
 class BinaryFileOutput(io.FileOutput):
     """
@@ -641,7 +496,6 @@ class BinaryFileOutput(io.FileOutput):
     def open(self):
         try:
             self.destination = open(self.destination_path, 'wb')
-
         except IOError, error:
             if not self.handle_io_errors:
                 raise

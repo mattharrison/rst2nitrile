@@ -179,31 +179,10 @@ Example ``rst2epub2.py`` Book
    \usepackage{ragged2e}
    \usepackage{upquote}
 
-  % need tip and hint
-
-  \newenvironment{hint}{%
-    \list{\makebox[0pt][r]{\fontfamily{%
-            \dgdefault}\fontseries{b}\fontsize{9pt}{11pt}\selectfont
-          HINT\hspace{2em}}}{\listparindent0pt\relax
-      \topsep9\p@\relax
-      \itemindent0\p@\relax
-      \rightmargin0\p@\relax
-      \leftmargin0\p@\relax
-      \labelwidth0\p@\relax
-      \labelsep0\p@}%
-      \item\itshape}{\vspace{-3pt}\endlist}
-
-  \newenvironment{tip}{%
-    \list{\makebox[0pt][r]{\fontfamily{%
-    \dgdefault}\fontseries{b}\fontsize{9pt}{11pt}\selectfont
-    TIP\hspace{2em}}}{\listparindent0pt\relax
-    \topsep9\p@\relax
-    \itemindent0\p@\relax
-    \rightmargin0\p@\relax
-    \leftmargin0\p@\relax
-    \labelwidth0\p@\relax
-    \labelsep0\p@}%
-    \item\itshape}{\vspace{-3pt}\endlist}
+  % define tip
+  \newenvironment{tip}%
+  {\begin{framewithtitle}{TIP2}}%
+  {\end{framewithtitle}}
 
   \title{RST2NITRILE Sample}
   \author{Matt Harrison}
