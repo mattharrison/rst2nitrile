@@ -181,7 +181,7 @@ Example ``rst2epub2.py`` Book
 
   % define tip
   \newenvironment{tip}%
-  {\begin{framewithtitle}{TIP2}}%
+  {\begin{framewithtitle}{Tip}}%
   {\end{framewithtitle}}
 
   \title{RST2NITRILE Sample}
