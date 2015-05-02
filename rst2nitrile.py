@@ -17,8 +17,9 @@ from docutils.parsers.rst import Directive, directives
 
 import nitrile as nt
 
-SECTIONS = ['part', 'chapter', 'section', 'subsection', 'subsubsection']
+SECTIONS = ['part', 'chapter', 'section', 'subsection', 'subsubsection', 'subsubsection'] #hack on end
 DEFAULT_SECTION_IDX = 1
+ADD_TITLE = False
 
 from docutils import nodes
 class envvar(nodes.Inline, nodes.TextElement): pass
@@ -27,7 +28,18 @@ def ignore_role(role, rawtext, text, lineno, inliner,
     return [envvar(rawtext, text)],[]
 from docutils.parsers.rst import roles
 roles.register_local_role('envvar', ignore_role)
+# ignore sphinx stuff
+for role in 'data,term,ref,func,class,meth,doc,attr,mod,paramref,exc'.split(','):
+    roles.register_local_role(role, ignore_role)
 
+class Ignore(Directive):
+    has_content = True
+    required_arguments = 0
+    optional_arguments = 200
+    def run(self, *args, **kwargs):
+        return []
+for directive in 'autoclass,autodata,automodule,currentmodule,deprecated,function,seealso,toctree,module,autofunction,versionadded,versionchanged'.split(','):
+    directives.register_directive(directive, Ignore)
 
 class Index(Directive):
     """
@@ -147,6 +159,15 @@ class Writer(writers.Writer):
              ['--template-file'],
              {'action': 'store',
               'dest': 'template_file'}),
+            ('Add title',
+             ['--add-title'],
+             {'action': 'store_true',
+             'default': False}),
+            ('Do not use chapters',
+             ['--no-chapters'],
+             {'action': 'store_true',
+              'default': False,
+              'dest': 'no_chapters'}),
             ('Specify a monospace font to use ("Courier New" default)',
              ['--mono-font'],
              {'action': 'store',
@@ -170,6 +191,14 @@ class Writer(writers.Writer):
         self.translator_class = NitrileTranslator
 
     def translate(self):
+        if self.document.settings.no_chapters:
+            global DEFAULT_SECTION_IDX
+            DEFAULT_SECTION_IDX = 2
+        if self.document.settings.add_title:
+            global ADD_TITLE
+            ADD_TITLE = True
+
+
         self.visitor = self.translator_class(self.document)
         self.document.walkabout(self.visitor)
         self.parts['whole'] = self.visitor.get_whole()
@@ -185,6 +214,9 @@ MEMOIR_MAPPING = {
     'comment': ('%', '\n'),
     'note': (r'\begin{framewithtitle}{Note}','\n\\end{framewithtitle}\n'),
     'hint': (r'\begin{framewithtitle}{Hint}','\n\\end{framewithtitle}\n'),
+    'sidebar': (r'\begin{framewithtitle}{Sidebar}','\n\\end{framewithtitle}\n'),
+    'topic': (r'\begin{framewithtitle}{Topic}','\n\\end{framewithtitle}\n'),
+    'warning': (r'\begin{framewithtitle}{Warning}','\n\\end{framewithtitle}\n'),
     'tip': (r'\begin{tip}','\\end{tip}\n'),
     #'tip': (r'\begin{framewithtitle}{Tip}','\n\\end{framewithtitle}\n'),
     'literal_block': ('\\begin{lstlisting}\n',
@@ -200,14 +232,24 @@ MEMOIR_MAPPING = {
     'block_quote':('\\begin{quote}\n', '\n\\end{quote}\n\n'),
     'attribution':('\\sourceatright{','}'),
     'footnote':('\\footnotetext','}'),
-    'enumerated_list': ('\\begin{enumerate}\n', '\\end{enumerate}\n\n'),
     'target': (None, None),
     'field_list': (None, None),
     'field': (None, None),
     'field_name': (None, None),
     'field_body': (None, None),
     'list_item': ('  \\item ', '\n'),
+    'enumerated_list': ('\\begin{enumerate}\n', '\\end{enumerate}\n\n'),
     'bullet_list': ('\\begin{itemize}\n', '\\end{itemize}\n'),
+    #'definition_list': ('\\begin{labelled}', '\\end{labelled}\n'),
+    'definition_list': ('\\begin{description}', '\\end{description}\n'),
+    'definition_list_item': (None, None),
+    'definition': (None, None),
+    'term': ('\\item[', '] '),
+    'figure': ('\\begin{figure}\n', '\n\\end{figure}\n\n'),
+    'caption': ('\\caption{', '}'),
+    'legend': ('\\legend{', '}'),
+    'subscript': ('\\textsubscript{','}'),
+    'superscript': ('\\textsuperscript{','}'),
 }
 
 NOSTARCH_MAPPING = MEMOIR_MAPPING.copy()
@@ -234,7 +276,9 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
         self.section_level = 0
         self.saw_title = False  # only look at first title
         self.node_mapping = mapping if mapping else MEMOIR_MAPPING
+        self.in_latex_role = False
         #self.node_mapping = mapping if mapping else NOSTARCH_MAPPING
+        self.non_supported = False
 
     def at(self, nodename):
         """
@@ -316,27 +360,60 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
     visit_envvar = _dumb_visit
     depart_envvar = _dumb_visit
 
+    # visit_problematic = _dumb_visit
+    # depart_problematic = _dumb_visit
+
+    visit_seealso = _dumb_visit
+    depart_seealso = _dumb_visit
+
+
     def visit_document(self, node):
         self.raw(r'', escape=False)
 
     def depart_document(self, node):
         self.raw('\n\\end{document}')
 
+    # def visit_table(self, node):
+    #     print "TABLE", node
+
     def visit_title(self, node):
+        if ADD_TITLE:
+            self.raw(r'\title{')
         # we need to skip main title,
         # preamble front matter should handle it
-        if not self.saw_title:
+        if self.at('admonition'):
+            self.raw('{')
+        # elif self.at('table'):
+        #     # caption for table
+        #     self.raw('\\caption{')
+        elif not self.saw_title:
             print "TITLEF", node
             pass
         elif self.section_level:
             self.doc += nt.Raw(r'{')
 
     def depart_title(self, node):
-        if not self.saw_title:
+        if ADD_TITLE:
+            self.raw('}')
+        if self.at('admonition'):
+            self.raw('}')
+        # elif self.at('table'):
+        #     # caption for table
+        #     self.raw('}')
+        elif not self.saw_title:
             pass
         elif self.section_level:
             self.doc += nt.Raw('}\n')
         self.saw_title = True
+
+    def visit_table(self, node):
+        self.table_caption = ''
+        self.raw(self.node_mapping['table'][0])
+
+    def depart_table(self, node):
+        if self.table_caption:
+            self.table_caption = '\\caption{{0}}'.format(self.table_caption)
+        self.raw(self.node_mapping['table'][1].format(self.table_caption))
 
     def visit_Text(self, node):
         if self.at('index'):
@@ -344,11 +421,24 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
             # http://en.wikibooks.org/wiki/LaTeX/Indexing#Controlling_sorting
             self.doc += nt.Raw(index_escape(node.astext()), escape=False)
 
+        elif self.at('title') and self.at('table'):
+            self.table_caption = node.astext()
         elif self.at('literal_block'):
-            self.doc += nt.Raw(node.astext(), escape=False)
+            txt = nt.accent_escape(node.astext())
+            # if '{x' in txt:
+            #     print "TXT", txt
+            #     import pdb; pdb.set_trace() # FIXME
+            #     txt = txt.replace(u'∈', '\\in')
+            self.doc += nt.Raw(txt, escape=False)
         elif self.at('footnote'):
             self.doc += nt.Raw(node.astext(), escape=True)
         elif self.at('title') and not self.saw_title:
+            pass
+        elif self.in_latex_role:
+            txt = node.astext()
+            txt = txt.replace(u'Φ(x)', '\\phi(x)')
+            self.doc += nt.Raw(txt, escape=False)
+        elif self.non_supported:
             pass
         elif not self.at('raw'):
             # should be last
@@ -371,11 +461,17 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
                 pass
             else:
                 raise
-        shutil.copy(full_path, out_path)
+        try:
+            shutil.copy(full_path, out_path)
+        except shutil.Error as e:
+            if 'same file' in str(e):
+                pass
+            else:
+                raise
         if scale:
             scale = '[scale={0}]'.format(str(float(scale)/100))
         else:
-            scale = ''
+            scale = '[width=\\textwidth]'  # fixme
         self.raw(r'''\includegraphics{0}{{'''.format(scale) + source_img + '''}
 ''')
 
@@ -399,31 +495,46 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
 
     def visit_inline(self, node):
         classes = node.attributes.get('classes', [])
+
         for klass in classes:
             # fixme - add support for others!!!
             if klass in ['tiny']:
                 self.raw('\\tiny{')
+            if klass in ['latex']:
+                # need to specify ".. role:: latex" in doc!
+                self.in_latex_role = True
+                txt = node.astext()
+
 
     def depart_inline(self, node):
         classes = node.attributes.get('classes', [])
         for klass in classes:
             if klass in ['tiny']:
                 self.raw('}\\normalsize')
+            if klass in ['latex']:
+                self.in_latex_role = False
 
     def visit_raw(self, node):
+        txt = node.astext()
         if node.attributes['format'] == 'latex':
+            # if 'phi' in txt:
+            #     import pdb; pdb.set_trace() # FIXME
             self.in_raw = True
-            self.doc +=nt.Raw(node.astext(), escape=False)
+            self.doc +=nt.Raw(txt, escape=False)
             self.doc +=nt.Raw('\n\n', escape=False)
         elif node.attributes['format'] == 'latexpreamble':
             self.in_raw = True
-            self.doc.preamble.__iadd__( nt.Raw(node.astext(), escape=False))
+            self.doc.preamble.__iadd__( nt.Raw(txt, escape=False))
             self.doc.preamble.__iadd__(nt.Raw('\n\n', escape=False))
+        else:
+            self.non_supported = True
 
     def depart_raw(self, node):
         self.in_raw = False
+        self.non_supported = False
 
     def visit_section(self, node):
+        print "SECTION node", node, "\n*****", self.section_level, SECTIONS
         section = SECTIONS[DEFAULT_SECTION_IDX + self.section_level]
         self.raw('\\{0}'.format(section))  # title puts opening {
         self.section_level += 1
@@ -434,10 +545,19 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
 
     def visit_reference(self, node):
         # \href{http://www.wikibooks.org}{Wikibooks home}
+
+        if 'refid' in node:
+            return #hack
         self.raw('\\href{' + node['refuri'] + '}{')
 
     def depart_reference(self, node):
         self.raw('}')
+
+    def visit_title_reference(self, node):
+        print "TR", node.parent
+
+    def depart_title_reference(self, node):
+        pass
 
     def visit_tgroup(self, node):
         # justify columns
@@ -481,8 +601,20 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
     def depart_footnote_reference(self, node):
         self.raw(']')
 
+    def visit_admonition(self, node):
+        self.raw('\\begin{framewithtitle}')
+
+    def depart_admonition(self, node):
+        self.raw('\\end{framewithtitle}')
+
+    def visit_term(self, node):
+
+        """<definition_list><definition_list_item><term>An Item</term><definition><paragraph>The defintion for an item.</paragraph></definition></definition_list_item><definition_list_item><term>Second Item</term><definition><paragraph>The first paragraph for the second item.</paragraph><paragraph>Another paragraph for the item.</paragraph></definition></definition_list_item></definition_list> definition_list"""
+
     def raw(self, txt, escape=False):
         self.doc += nt.Raw(txt, escape)
+
+
 
 
 def index_escape(txt):
@@ -497,6 +629,7 @@ class BinaryFileOutput(io.FileOutput):
         try:
             self.destination = open(self.destination_path, 'wb')
         except IOError, error:
+            # raise
             if not self.handle_io_errors:
                 raise
             print >>sys.stderr, '%s: %s' % (error.__class__.__name__,
