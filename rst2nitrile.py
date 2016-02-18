@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 # Copyright 2008-2009 Matt Harrison
 # Licensed under Apache License, Version 2.0 (current)
+from __future__ import print_function
 import os
 import shutil
 import sys
@@ -16,6 +17,10 @@ from docutils.parsers import rst
 from docutils.parsers.rst import Directive, directives
 
 import nitrile as nt
+
+if sys.version_info[0] > 2:
+    unicode = str
+
 
 SECTIONS = ['part', 'chapter', 'section', 'subsection', 'subsubsection', 'subsubsection'] #hack on end
 DEFAULT_SECTION_IDX = 1
@@ -212,12 +217,12 @@ MEMOIR_MAPPING = {
     'strong': ('\\textbf{', '}'),
     'emphasis': ('\\emph{', '}'),
     'comment': ('%', '\n'),
-    'note': (r'\begin{framewithtitle}{Note}','\n\\end{framewithtitle}\n'),
-    'hint': (r'\begin{framewithtitle}{Hint}','\n\\end{framewithtitle}\n'),
-    'sidebar': (r'\begin{framewithtitle}{Sidebar}','\n\\end{framewithtitle}\n'),
-    'topic': (r'\begin{framewithtitle}{Topic}','\n\\end{framewithtitle}\n'),
-    'warning': (r'\begin{framewithtitle}{Warning}','\n\\end{framewithtitle}\n'),
-    'tip': (r'\begin{tip}','\\end{tip}\n'),
+    'note': ('\\begin{framewithtitle}{Note}\\noindent\n','\n\\end{framewithtitle}\n'),
+    'hint': ('\\begin{framewithtitle}{Hint}\\noindent\n','\n\\end{framewithtitle}\n'),
+    'sidebar': ('\\begin{framewithtitle}{Sidebar}\\noindent\n','\n\\end{framewithtitle}\n'),
+    'topic': ('\\begin{framewithtitle}{Topic}\\noindent\n','\n\\end{framewithtitle}\n'),
+    'warning': ('\\begin{framewithtitle}{Warning}\\noinent\n','\n\\end{framewithtitle}\n'),
+    'tip': ('\\begin{tip}\\noindent\n','\\end{tip}\n'),
     #'tip': (r'\begin{framewithtitle}{Tip}','\n\\end{framewithtitle}\n'),
     'literal_block': ('\\begin{lstlisting}\n',
                       '\n\\end{lstlisting}\n\n'),
@@ -319,13 +324,13 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
 
     def default_visit(self, node):
         if self.settings.report_level >= 3:
-            print "ERR! NODE", node, node.tagname
-        print "NODE", str(node)
+            print("ERR! NODE", node, node.tagname)
+        print("NODE", str(node))
         raise NotImplementedError('node is %r, tag is %s' % (node, node.tagname))
 
     def default_departure(self, node):
         if self.settings.report_level >= 3:
-            print "NODE", node, node.tagname
+            print("NODE", node, node.tagname)
         raise NotImplementedError('depart node is %r, tag is %s' % (node, node.tagname))
 
     def _dumb_visit(self, node):
@@ -374,7 +379,7 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
         self.raw('\n\\end{document}')
 
     # def visit_table(self, node):
-    #     print "TABLE", node
+    #     print("TABLE", node)
 
     def visit_title(self, node):
         if ADD_TITLE:
@@ -387,7 +392,7 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
         #     # caption for table
         #     self.raw('\\caption{')
         elif not self.saw_title:
-            print "TITLEF", node
+            print("TITLEF", node)
             pass
         elif self.section_level:
             self.doc += nt.Raw(r'{')
@@ -426,7 +431,7 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
         elif self.at('literal_block'):
             txt = nt.accent_escape(node.astext())
             # if '{x' in txt:
-            #     print "TXT", txt
+            #     print("TXT", txt)
             #     import pdb; pdb.set_trace() # FIXME
             #     txt = txt.replace(u'∈', '\\in')
             self.doc += nt.Raw(txt, escape=False)
@@ -447,13 +452,16 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
     depart_Text = _dumb_depart
 
     def visit_image(self, node):
+        print("IMGE", node)
         source_img = node.attributes['uri']
         scale = node.attributes.get('scale', None)
         def abspath(source_img, source_file):
             return os.path.abspath(os.path.join(os.path.dirname(source_file), source_img))
         full_path = abspath(source_img, self.settings._source)
         self.doc.add_image(source_img, full_path)
+        print("FP", full_path, 'SD', self.settings._destination) #, "OP", out_path)
         out_path = abspath(source_img, self.settings._destination)
+
         try:
             os.makedirs(os.path.dirname(out_path))
         except OSError as e:
@@ -534,7 +542,7 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
         self.non_supported = False
 
     def visit_section(self, node):
-        print "SECTION node", node, "\n*****", self.section_level, SECTIONS
+        print("SECTION node", node, "\n*****", self.section_level, SECTIONS)
         section = SECTIONS[DEFAULT_SECTION_IDX + self.section_level]
         self.raw('\\{0}'.format(section))  # title puts opening {
         self.section_level += 1
@@ -554,7 +562,7 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
         self.raw('}')
 
     def visit_title_reference(self, node):
-        print "TR", node.parent
+        print("TR", node.parent)
 
     def depart_title_reference(self, node):
         pass
@@ -627,14 +635,15 @@ class BinaryFileOutput(io.FileOutput):
     """
     def open(self):
         try:
+            print("DEST", self.destination_path)
             self.destination = open(self.destination_path, 'wb')
-        except IOError, error:
-            # raise
+        except IOError as error:
+            raise
             if not self.handle_io_errors:
                 raise
-            print >>sys.stderr, '%s: %s' % (error.__class__.__name__,
-                                            error)
-            print >>sys.stderr, ('Unable to open destination file for writing '
+            sys.stderr.write('%s: %s' % (error.__class__.__name__,
+                                            error))
+            sys.stderr.write('Unable to open destination file for writing '
                                  '(%r).  Exiting.' % self.destination_path)
             sys.exit(1)
         self.opened = 1
