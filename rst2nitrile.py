@@ -443,7 +443,7 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
             if txt.startswith('longtable:'):
                 self.old_table = self.node_mapping['table_code']
                 # placeholder for caption on depart needs to be before end of longtable!
-                self.node_mapping['table_code'] = (r'\centering\begin{longtable}',
+                self.node_mapping['table_code'] = (r'\begin{longtable}',
                                                    '{}\\end{{longtable}}\n')
         elif self.at('title') and self.at('table'):
             self.table_caption = node.astext()
@@ -503,9 +503,10 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
         if scale:
             scale = '[scale={0}]'.format(str(float(scale)/100))
         else:
-            scale = r'[width=0.95\textwidth]'  # fixme
+            scale = r'[width=0.95\textwidth,height=0.9\textheight,keepaspectratio]'  # fixme
         self.raw('\\noindent\\makebox[\\textwidth]{%\n')
         self.raw(r'\includegraphics{0}{{'.format(scale) + source_img + '}')
+#\includegraphics[width=\textwidth,height=\textheight,keepaspectratio]{myfig.png}
 
     def depart_image(self, node):
         self.raw('}\n\n') # newlines so paragrahps start after image, not inline
@@ -595,7 +596,7 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
         # justify columns
         self.num_cols = int(node['cols'])
         if self.old_table:
-            self.raw('{ r ' + ' l'* (self.num_cols -1)  + ' }\n')
+            self.raw('{ r ' + ' l'* (self.num_cols -2)  + ' p{.4\\textwidth} }\n')
         else:
             self.raw('{ R ' + ' L'* (self.num_cols -1)  + ' }\n')
 
