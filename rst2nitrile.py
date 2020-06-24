@@ -208,13 +208,16 @@ MEMOIR_MAPPING = {
     'comment': ('%', '\n'),
     # 'note': ('\\begin{framewithtitle}{Note}\\noindent\n',
     #          '\n\\end{framewithtitle}\n'),
-    'note': ('\\begin{mdframed}[needspace=8em,frametitle={Note},backgroundcolor=litegreen,linewidth=0pt]\n',
+    #'note': ('\\begin{mdframed}[needspace=6em,frametitle={Note},backgroundcolor=litegreen,linewidth=0pt]\n',
+    # 'note': ('\\begin{mdframed}[frametitle={Note},backgroundcolor=litegreen,linewidth=0pt]\n\\orphan ',
+    #          '\\widow\n\\end{mdframed}\n'),
+    'note': ('\\begin{mdframed}[needspace=6.5em,frametitle={Note},backgroundcolor=litegreen,linewidth=0pt]\n',
              '\n\\end{mdframed}\n'),
-    'tip': ('\\begin{mdframed}[needspace=6em,frametitle={Tip},backgroundcolor=litegreen,linewidth=0pt]\n',
+    'tip': ('\\begin{mdframed}[needspace=6.5em,frametitle={Tip},backgroundcolor=litegreen,linewidth=0pt]\n',
              '\n\\end{mdframed}\n'),
-    'warning': ('\\begin{mdframed}[needspace=6em,frametitle={Warning},backgroundcolor=litegreen,linewidth=0pt]\n',
+    'warning': ('\\begin{mdframed}[needspace=6.5em,frametitle={Warning},backgroundcolor=litegreen,linewidth=0pt]\n',
              '\n\\end{mdframed}\n'),
-    'hint': ('\\begin{mdframed}[needspace=6em,frametitle={Hint},backgroundcolor=litegreen,linewidth=0pt]\n',
+    'hint': ('\\begin{mdframed}[needspace=6.5em,frametitle={Hint},backgroundcolor=litegreen,linewidth=0pt]\n',
              '\n\\end{mdframed}\n'),
 
     # 'hint': ('\\begin{framewithtitle}{Hint}\\noindent\n',
@@ -227,7 +230,8 @@ MEMOIR_MAPPING = {
     #             '\n\\end{framewithtitle}\n'),
     # 'tip': ('\\begin{tip}\\noindent\n', '\\end{tip}\n'),
     'literal_block': ('\\needspace{1\\baselineskip} % reserve at least 1 lines, if there is not enough\n\n'+\
-                      '\\begin{lstlisting}[xleftmargin=2em]\n',
+                      #'\\begin{lstlisting}[xleftmargin=2em]\n',
+                      '\\begin{lstlisting}[xleftmargin=0em]\n',
                       '\n\\end{lstlisting}\n\n'),
     # requires verbments
     # 'literal_block': ('\\begin{pyglist}[bgcolor=gray]\n',
@@ -240,10 +244,14 @@ MEMOIR_MAPPING = {
     'table_code_old': (r'\begin{center}\begin{tabulary}{\textwidth}',
                        '\\end{{tabulary}}{}\\end{{center}}\n'),
     # the H in begin{figure} pins it "Here"
-    'table_code': (r'\begin{figure}[H]\centering\begin{tabulary}{\textwidth}',
-                   '\\end{{tabulary}}{}\\end{{figure}}\n'),
-    'table_code2': (r'\centering\begin{tabulary}{\textwidth}',
-                   '{}\\end{{tabulary}}\n'),
+    # TODO figure out how to make table font small
+    'table_code': (r'\begin{figure}[H]\centering \tiny \begin{tabulary}{\textwidth}',
+                    '\\end{{tabulary}}{}\\end{{figure}}\n'),
+    #'long_table_code': (r'\begin{longtable}', '{}\\end{{longtable}}\n')
+    'long_table_code': (r'\begingroup \small \begin{longtable}',
+                        '{}\\end{{longtable}}\\endgroup\n'),
+    #'table_code2': (r'\centering\begin{tabulary}{\textwidth}',
+    #               '{}\\end{{tabulary}}\n'),
     # <colspec colwidth="51"/><colspec colwidth="40"/>
     'colspec': (None, None),
     'thead': ('', '\n\\hline\n'),
@@ -268,6 +276,9 @@ MEMOIR_MAPPING = {
     'legend': (r'\legend{', '}'),
     'subscript': (r'\textsubscript{', '}'),
     'superscript': (r'\textsuperscript{', '}'),
+    'line_block': (None, None),
+    'line': (None, '\\\\\n')
+    
 }
 
 NOSTARCH_MAPPING = MEMOIR_MAPPING.copy()
@@ -298,6 +309,7 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
         self.in_latex_role = False
         self.non_supported = False
         self.old_table = None
+        self.table_fmt = None
 
     def at(self, nodename):
         """
@@ -321,8 +333,11 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
         self.in_node[name] += 1
         if name in self.node_mapping:
             content = self.node_mapping[name][0]
-            if content:
+            if self.at('title') and self.at('table'):
+                self.table_caption += content
+            elif content:
                 self.raw(content)
+
         else:
             nodes.GenericNodeVisitor.dispatch_visit(self, node)
 
@@ -331,7 +346,9 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
         name = node.tagname
         if name in self.node_mapping:
             content = self.node_mapping[name][1]
-            if content:
+            if self.at('title') and self.at('table'):
+                self.table_caption += content
+            elif content:
                 self.raw(content)
         else:
             nodes.GenericNodeVisitor.dispatch_departure(self, node)
@@ -342,6 +359,9 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
         if self.settings.report_level >= 1:
             print("NODE", str(node))
             print("PARENT", str(node.parent))
+            print("GPARENT", str(node.parent.parent))
+            print("GGPARENT", str(node.parent.parent.parent))
+            pass
         raise NotImplementedError('node is %r, tag is %s' % (node, node.tagname))
 
     def default_departure(self, node):
@@ -400,7 +420,7 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
         if self.at('admonition'):
             self.raw('{')
         elif self.at('table'):
-            # skip
+            # skip - handled in visit_Text
             pass
         elif not self.saw_title:
             pass
@@ -426,6 +446,9 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
         self.raw(self.node_mapping['table_code'][0])
 
     def depart_table(self, node):
+        nstr = str(node)
+        if 'Data types for' in nstr:
+            print("TABLE", nstr)
         if self.table_caption:
             self.table_caption = '\\caption{{{}}}'.format(self.table_caption)
         self.raw(self.node_mapping['table_code'][1].format(self.table_caption))
@@ -441,12 +464,17 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
         elif self.at('comment'):
             txt = node.astext()
             if txt.startswith('longtable:'):
-                self.old_table = self.node_mapping['table_code']
+                if not self.old_table:
+                    self.old_table = self.node_mapping['table_code']
                 # placeholder for caption on depart needs to be before end of longtable!
-                self.node_mapping['table_code'] = (r'\begin{longtable}',
-                                                   '{}\\end{{longtable}}\n')
+                self.node_mapping['table_code'] = self.node_mapping['long_table_code'] 
+                # specify format with
+                # .. longtable: format: { r l l p {.4\textwidth }}
+                if 'format:' in txt:
+                    self.table_fmt = txt.split('format:')[-1].strip()
+
         elif self.at('title') and self.at('table'):
-            self.table_caption = node.astext()
+            self.table_caption += nt.escape(node.astext())
         elif self.at('literal_block'):
             txt = nt.accent_escape(node.astext())
             self.doc += nt.Raw(txt, escape=False)
@@ -480,6 +508,9 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
     def visit_image(self, node):
         source_img = node.attributes['uri']
         scale = node.attributes.get('scale', None)
+        width = node.attributes.get('width', '0.95')
+        if '%' in width:
+            width = '{:.2}'.format(int(width.replace('%', ''))/100.)
         def abspath(source_img, source_file):
             return os.path.abspath(os.path.join(os.path.dirname(source_file), source_img))
         full_path = abspath(source_img, self.settings._source)
@@ -503,7 +534,7 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
         if scale:
             scale = '[scale={0}]'.format(str(float(scale)/100))
         else:
-            scale = r'[width=0.95\textwidth,height=0.9\textheight,keepaspectratio]'  # fixme
+            scale = r'[width={}\textwidth,height=0.9\textheight,keepaspectratio]'.format(width)  # fixme
         self.raw('\\noindent\\makebox[\\textwidth]{%\n')
         self.raw(r'\includegraphics{0}{{'.format(scale) + source_img + '}')
 #\includegraphics[width=\textwidth,height=\textheight,keepaspectratio]{myfig.png}
@@ -514,6 +545,7 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
     def visit_paragraph(self, node):
         classes = node.attributes.get('classes', [])
         if self.at('index'):
+            # TODO - I think paragraphs in index values messing up latex paragraph indentation
             # using @ helps control sorting
             # http://en.wikibooks.org/wiki/LaTeX/Indexing#Controlling_sorting
             self.raw(r'''\index{'''+ index_escape(node.astext()) + "@")
@@ -564,7 +596,7 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
         self.non_supported = False
 
     def visit_section(self, node):
-        print("SECTION node", node, "\n*****", self.section_level, SECTIONS)
+        #print("SECTION node", node, "\n*****", self.section_level, SECTIONS)
         section = SECTIONS[DEFAULT_SECTION_IDX + self.section_level]
         self.raw('\\{0}'.format(section))  # title puts opening {
         self.section_level += 1
@@ -595,7 +627,10 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
     def visit_tgroup(self, node):
         # justify columns
         self.num_cols = int(node['cols'])
-        if self.old_table:
+        if self.table_fmt:
+            self.raw(self.table_fmt + '\n')
+            self.table_fmt = None
+        elif self.old_table:
             self.raw('{ r ' + ' l'* (self.num_cols -2)  + ' p{.4\\textwidth} }\n')
         else:
             self.raw('{ R ' + ' L'* (self.num_cols -1)  + ' }\n')
@@ -654,7 +689,7 @@ class NitrileTranslator(nodes.GenericNodeVisitor):
 
 
 def index_escape(txt):
-    return txt.replace('!', '"!').replace('#', '"\#').replace('%', '\%').replace('_', '\_').replace('{', '\{').replace('}', '\}').replace('@', '"@').replace('&', r'\&').replace('^', r'\textasciicircum{}').replace('~', r'\textasciitilde{}')
+    return txt.replace('!', '"!').replace('#', '"\#').replace('%', '\%').replace('_', '\_').replace('{', '\{').replace('}', '\}').replace('@', '"@').replace('&', r'\&').replace('^ ', r'\textasciicircum{}\enspace').replace('^', r'\textasciicircum{}').replace('~', r'\textasciitilde{}')
 
 
 class BinaryFileOutput(io.FileOutput):
